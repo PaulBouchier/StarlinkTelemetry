@@ -1,6 +1,7 @@
 #include <M5StickC.h>
 #include "secrets.h"
 #include "WiFi.h"
+#include "AsyncUDP.h"
 
 // GPIOs
 #define ADC_PIN 36
@@ -28,6 +29,7 @@ bool buttonB = false;
 // Display variables
 int displayMode = 0;  // 0: volts, 1: time
 int timeMode = 0; // 0: display, 1: set year, 2 set month...
+char statusMsg[50];
 
 // Time-related variables
 int64_t secondsSinceStart = 0;
@@ -40,6 +42,9 @@ RTC_DateTypeDef RTC_DateStruct;
 // Network variables
 bool wifiConnecting = false;
 bool wifiConnected = false;
+bool udpListening = false;
+bool wifiSetupComplete = false;
+const int udpListenPort = 6970;
 
 IPAddress local_IP(192, 168, 8, 10);  // Static IP address
 IPAddress gateway(192, 168, 8, 1);
@@ -47,13 +52,14 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);   // optional
 IPAddress secondaryDNS(8, 8, 4, 4); // optional
 
-WiFiServer server(6970); // Set socket server port number to 6970
+AsyncUDP udp;
 
 
 bool connectWifi()
 {
   if (!wifiConnecting)
   {
+    Serial.println("working on setting up networking");
     // runs once
     WiFi.mode(WIFI_STA);
     // Configure static IP address
@@ -64,6 +70,7 @@ bool connectWifi()
     }
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     wifiConnecting = true;
+    return false;
   }
 
   if (!wifiConnected)
@@ -75,8 +82,41 @@ bool connectWifi()
     }
     wifiConnected = true;
     M5.Lcd.setTextColor(TFT_YELLOW,TFT_BLACK);
-    Serial.println("connected to wifi");
-    // Serial.println(WiFi.localIP());
+    Serial.print("connected to wifi with IP: ");
+    Serial.println(WiFi.localIP());
+    return false;
+  }
+
+  if (!udpListening)
+  {
+    // set up lambda to call on receipt of a udp packet
+    Serial.println("Setting up UDP server");
+    if (udp.listen(udpListenPort))
+    {
+      Serial.print("UDP listening on port ");
+      Serial.println(udpListenPort);
+      udp.onPacket([](AsyncUDPPacket packet)
+      {
+        // this is a bloody lambda!
+        Serial.print("Received packet from ");
+        Serial.print(packet.remoteIP());
+        Serial.print(", Length: ");
+        Serial.print(packet.length());
+        Serial.print(", Data: ");
+        Serial.write(packet.data(), packet.length());
+        Serial.println();
+        if (!strncmp("status", (char*)packet.data(), 6))
+        {
+          Serial.println("Got status request");
+          udp.writeTo((uint8_t*)statusMsg, sizeof(statusMsg), packet.remoteIP(), udpListenPort);
+        }
+        else if (!strncmp("toggle", (char*)packet.data(), 6))
+        {
+          Serial.println("Got toggle request");
+        }
+      });
+      udpListening = true;
+    }
   }
   return true;
 }
@@ -122,7 +162,8 @@ void displayVolts(double v, bool enable)
   else if (v >=10.8) soc = "1-10%";
   else soc = "Unknown";
 
-  M5.Lcd.printf("%s, %0.2fV\nSoC %s", enable?"ON":"OFF", v, soc.c_str());
+  sprintf(statusMsg, "%s, %0.2fV\nSoC %s", enable?"ON":"OFF", v, soc.c_str());
+  M5.Lcd.print(statusMsg);
 }
 
 void resetDisplayMode()
@@ -277,10 +318,9 @@ void secondsUpdate()
 {
   bool rv;
   // Check if we're connected to Wifi yet
-  if (!wifiConnected)
+  if (!wifiSetupComplete)
   {
-    rv = connectWifi();
-    // Serial.println(rv);
+    wifiSetupComplete = connectWifi();
   }
 
   // Get the time-of-day from the real-time clock for use by various called functions.
