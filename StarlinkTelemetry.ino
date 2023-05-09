@@ -44,7 +44,7 @@ bool wifiConnecting = false;
 bool wifiConnected = false;
 bool udpListening = false;
 bool wifiSetupComplete = false;
-const int udpListenPort = 6970;
+const int udpPort = 6970;
 
 IPAddress local_IP(192, 168, 8, 10);  // Static IP address
 IPAddress gateway(192, 168, 8, 1);
@@ -91,10 +91,10 @@ bool connectWifi()
   {
     // set up lambda to call on receipt of a udp packet
     Serial.println("Setting up UDP server");
-    if (udp.listen(udpListenPort))
+    if (udp.listen(udpPort))
     {
       Serial.print("UDP listening on port ");
-      Serial.println(udpListenPort);
+      Serial.println(udpPort);
       udp.onPacket([](AsyncUDPPacket packet)
       {
         // this is a bloody lambda!
@@ -108,14 +108,16 @@ bool connectWifi()
         if (!strncmp("status", (char*)packet.data(), 6))
         {
           Serial.println("Got status request");
-          udp.writeTo((uint8_t*)statusMsg, sizeof(statusMsg), packet.remoteIP(), udpListenPort);
+          udp.writeTo((uint8_t*)statusMsg, strnlen(statusMsg, sizeof(statusMsg)), packet.remoteIP(), udpPort);
         }
         else if (!strncmp("toggle", (char*)packet.data(), 6))
         {
           Serial.println("Got toggle request");
+          setPowerEnable(!powerEnableStatus);
         }
       });
       udpListening = true;
+      M5.Lcd.setTextColor(TFT_WHITE,TFT_BLACK);
     }
   }
   return true;
@@ -379,8 +381,6 @@ void setup() {
   M5.Rtc.GetTime(&RTC_TimeStruct);
   M5.Rtc.GetData(&RTC_DateStruct);
   lastHour = RTC_TimeStruct.Hours;
-
-  Serial.println("Finished setup");
 }
 
 void loop() {
