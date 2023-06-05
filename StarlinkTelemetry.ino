@@ -346,7 +346,7 @@ void secondsUpdate()
   updateDisplay();
 
   // check if we are in a new hour and do hour-aligned work
-  // hoursUpdate();
+  hoursUpdate();
 }
 
 void setup() {
