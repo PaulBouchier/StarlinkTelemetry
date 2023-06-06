@@ -15,6 +15,7 @@
 // battery voltage variables
 const int avgArraySize = 10;
 const double lowVLimit = 12.5;
+const double shutdownVLimit = 5.0;
 double batteryVolts;
 int avgArrayIndex = 0;
 double batteryVoltsArray[avgArraySize];  // array of last n voltage measurements used for trailing average
@@ -337,7 +338,19 @@ void secondsUpdate()
   }
 
   batteryVolts = readVolts();
-  if (batteryVolts < lowVLimit)
+  if (batteryVolts < shutdownVLimit)
+  {
+    // power off when master switch turned off
+    const int cancelDelaySec = 5;
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(0, 0, 2);
+    M5.Lcd.println("Shutting\nDown");
+    delay(2000);
+
+    M5.Axp.PowerOff();
+    // never reached
+  }
+  else if (batteryVolts < lowVLimit)
   {
     setPowerEnable(false);
   }
