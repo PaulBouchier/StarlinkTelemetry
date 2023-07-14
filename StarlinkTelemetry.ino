@@ -2,6 +2,7 @@
 #include "secrets.h"
 #include "WiFi.h"
 #include "AsyncUDP.h"
+#include <EEPROM.h>
 
 // GPIOs
 #define ADC_PIN 36
@@ -11,6 +12,10 @@
 #define ADC_15V 1519
 #define ADC_15_10V (ADC_15V - ADC_10V)
 #define DELTA_V_REF 5.0
+
+// EEPROM variable offsets
+#define MIDNIGHT_OFF_ADDR 0
+#define EEPROM_SIZE 10  // define the size of EEPROM(Byte).
 
 // battery voltage variables
 const int avgArraySize = 10;
@@ -48,13 +53,15 @@ bool wifiSetupComplete = false;
 const int udpPort = 6970;
 
 IPAddress local_IP(192, 168, 8, 10);  // Static IP address
-IPAddress gateway(192, 168, 8, 1);
+IPAddress linkyRouter(192, 168, 8, 1);
 IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);   // optional
 IPAddress secondaryDNS(8, 8, 4, 4); // optional
 
 AsyncUDP udp;
 
+// EEPROM variables
+uint8_t midnightOff;
 
 bool connectWifi()
 {
@@ -64,7 +71,7 @@ bool connectWifi()
     // runs once
     WiFi.mode(WIFI_STA);
     // Configure static IP address
-    if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    if (!WiFi.config(local_IP, linkyRouter, subnet, primaryDNS, secondaryDNS)) {
       Serial.println("STA Failed to configure");
       delay(1000);
       return(false);
@@ -147,9 +154,16 @@ double readVolts()
   return v;
 }
 
-void displayVolts(double v, bool enable)
+void displayVolts(double v)
 {
   String soc;
+
+  if (buttonA)
+  {
+    setPowerEnable(!powerEnableStatus);
+    buttonA = false;
+    Serial.printf("ButtonA setting powerEnable to %d\n", powerEnableStatus);
+  }
 
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 0, 2);
@@ -165,7 +179,7 @@ void displayVolts(double v, bool enable)
   else if (v >=10.8) soc = "1-10%";
   else soc = "Unknown";
 
-  sprintf(statusMsg, "%s, %0.2fV\nSoC %s", enable?"ON":"OFF", v, soc.c_str());
+  sprintf(statusMsg, "%s, %0.2fV\nSoC %s\0", powerEnableStatus?"ON":"OFF", v, soc.c_str());
   M5.Lcd.print(statusMsg);
 }
 
@@ -178,16 +192,16 @@ void resetDisplayMode()
 void displayDateTime()
 {
   // Display prompt for date/time field to set
-  M5.Lcd.setCursor(0, 40);
+  M5.Lcd.setCursor(0, 35);
   switch (timeMode)
   {
     case 0:
-      M5.Lcd.println("M5: Set\ntime/date");
+      M5.Lcd.println("M5: Set\ntime/date (B: nxt)");
       if (buttonA)
         timeMode++;
       break;
     case 1:
-      M5.Lcd.println("M5: set year");
+      M5.Lcd.println("M5: set year (B: nxt)");
       if (buttonA)
       {
         RTC_DateStruct.Year++;
@@ -199,7 +213,7 @@ void displayDateTime()
       }
       break;
     case 2:
-      M5.Lcd.println("M5: set month");
+      M5.Lcd.println("M5: set month (B: nxt)");
       if (buttonA)
       {
         RTC_DateStruct.Month++;
@@ -211,7 +225,7 @@ void displayDateTime()
       }
       break;
     case 3:
-      M5.Lcd.println("M5: set day-of-month");
+      M5.Lcd.println("M5: set day-of-month (B: nxt)");
       if (buttonA)
       {
         RTC_DateStruct.Date++;
@@ -223,7 +237,7 @@ void displayDateTime()
       }
       break;
     case 4:
-      M5.Lcd.println("M5: set hour");
+      M5.Lcd.println("M5: set hour (B: nxt)");
       if (buttonA)
       {
         RTC_TimeStruct.Hours++;
@@ -235,7 +249,7 @@ void displayDateTime()
       }
       break;
     case 5:
-      M5.Lcd.println("M5: set minute");
+      M5.Lcd.println("M5: set minute (B: nxt)");
       if (buttonA)
       {
         RTC_TimeStruct.Minutes++;
@@ -247,7 +261,7 @@ void displayDateTime()
       }
       break;
     case 6:
-      M5.Lcd.println("M5: clear seconds");
+      M5.Lcd.println("M5: clear seconds (B: nxt)");
       if (buttonA)
       {
         RTC_TimeStruct.Seconds = 0;
@@ -257,11 +271,33 @@ void displayDateTime()
     default:
       resetDisplayMode();
   }
+  buttonA = false;
   M5.Lcd.setCursor(0, 1, 1);
   M5.Lcd.printf("%04d-%02d-%02d\n", RTC_DateStruct.Year,
   RTC_DateStruct.Month, RTC_DateStruct.Date);
   M5.Lcd.printf("%02d:%02d:%02d\n", RTC_TimeStruct.Hours,
     RTC_TimeStruct.Minutes, RTC_TimeStruct.Seconds);
+}
+
+void displayMidnightOff()
+{
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setCursor(0, 1, 1);
+  M5.Lcd.printf("Midnight:\n%s\n", midnightOff?"OFF":"No Chg\nM5: toggle\n(B: nxt)");
+  if (buttonA)
+  {
+    if (!midnightOff)
+    {
+      midnightOff = 1;
+    }
+    else
+    {
+      midnightOff = 0;
+    }
+    EEPROM.write(MIDNIGHT_OFF_ADDR, (uint8_t)midnightOff);
+    EEPROM.commit();
+    buttonA = 0;
+  }
 }
 
 void updateDisplay()
@@ -270,11 +306,13 @@ void updateDisplay()
 
   if (displayMode == 0)
   {
-    displayVolts(batteryVolts, powerEnableStatus);
+    displayVolts(batteryVolts);
     // Serial.printf("Volts: %0.2f, powerEnable: %d\n", batteryVolts, powerEnableStatus);
   }
   else if (displayMode == 1)
     displayDateTime();
+  else if (displayMode == 2)
+    displayMidnightOff();
   else
     displayMode = 0;  // should never get here
   // clear buttonB after display functions have used it
@@ -302,7 +340,8 @@ void setPowerEnable(bool enable)
 void midnight()
 {
   Serial.println("Midnight");
-  setPowerEnable(false);
+  if (midnightOff)
+    setPowerEnable(false);
 }
 
 void hoursUpdate()
@@ -314,6 +353,8 @@ void hoursUpdate()
 
     if (0 == currentHour)
       midnight();
+    
+    lastHour = currentHour;
   }
 }
     
@@ -329,13 +370,6 @@ void secondsUpdate()
   // Get the time-of-day from the real-time clock for use by various called functions.
   M5.Rtc.GetTime(&RTC_TimeStruct);
   M5.Rtc.GetData(&RTC_DateStruct);
-
-  if (buttonA)
-  {
-    setPowerEnable(!powerEnableStatus);
-    buttonA = false;
-    Serial.printf("ButtonA setting powerEnable to %d\n", powerEnableStatus);
-  }
 
   batteryVolts = readVolts();
   if (batteryVolts < shutdownVLimit)
@@ -387,6 +421,17 @@ void setup() {
   for (int i=0; i<avgArraySize; i++)
     batteryVoltsArray[i] = 13.0;  // initialize with good value that doesn't trigger shutdown
 
+  // Initialize EEPROM
+  while (!EEPROM.begin(EEPROM_SIZE)) {  // Request storage of SIZE size(success return)
+    Serial.println("\nFailed to initialise EEPROM!");
+    M5.Lcd.println("EEPROM Fail");
+    delay(1000000);
+  }
+
+  // Initialize variables from EEPROM
+  midnightOff = EEPROM.read(MIDNIGHT_OFF_ADDR);
+  Serial.printf("midnightOff: %d\n", midnightOff);
+
   // initialize time
   int64_t now = esp_timer_get_time();
   nextSecondTime = now + 1000000;  // time to increment the seconds counter
@@ -414,9 +459,11 @@ void loop() {
     if (displayMode == 0)
       displayMode = 1;
     else if (displayMode == 1 && timeMode == 0)
-      displayMode = 0;
+      displayMode = 2;
     else if (displayMode == 1 && timeMode != 0)
       timeMode++;
+    else if (displayMode == 2)
+      displayMode = 0;
     else
       displayMode = 0;
     
