@@ -315,7 +315,6 @@ void updateDisplay()
     displayMidnightOff();
   else
     displayMode = 0;  // should never get here
-  // clear buttonB after display functions have used it
 }
 
 void setPowerEnable(bool enable)
