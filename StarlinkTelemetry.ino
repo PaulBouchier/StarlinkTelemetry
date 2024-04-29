@@ -1,5 +1,5 @@
 
-#include "M5StickC.h"
+#include "M5StickCPlus2.h"
 #include "secrets.h"
 #include "WiFi.h"
 #include "AsyncUDP.h"
@@ -43,8 +43,8 @@ int64_t secondsSinceStart = 0;
 int64_t nextSecondTime;
 int lastHour = 0;
 // RTC time variables
-RTC_TimeTypeDef RTC_TimeStruct;
-RTC_DateTypeDef RTC_DateStruct;
+m5::rtc_time_t RTC_TimeStruct;
+m5::rtc_date_t RTC_DateStruct;
 
 // Network variables
 bool wifiConnecting = false;
@@ -205,68 +205,68 @@ void displayDateTime()
       M5.Lcd.println("M5: set year (B: nxt)");
       if (buttonA)
       {
-        RTC_DateStruct.Year++;
-        if (RTC_DateStruct.Year > 2028)
+        RTC_DateStruct.year++;
+        if (RTC_DateStruct.year > 2028)
         {
-          RTC_DateStruct.Year = 2023;
+          RTC_DateStruct.year = 2023;
         }
-        M5.Rtc.SetData(&RTC_DateStruct);
+        M5.Rtc.setDate(&RTC_DateStruct);
       }
       break;
     case 2:
       M5.Lcd.println("M5: set month (B: nxt)");
       if (buttonA)
       {
-        RTC_DateStruct.Month++;
-        if (RTC_DateStruct.Month > 12)
+        RTC_DateStruct.month++;
+        if (RTC_DateStruct.month > 12)
         {
-          RTC_DateStruct.Month = 1;
+          RTC_DateStruct.month = 1;
         }
-        M5.Rtc.SetData(&RTC_DateStruct);
+        M5.Rtc.setDate(&RTC_DateStruct);
       }
       break;
     case 3:
       M5.Lcd.println("M5: set day-of-month (B: nxt)");
       if (buttonA)
       {
-        RTC_DateStruct.Date++;
-        if (RTC_DateStruct.Date > 31)
+        RTC_DateStruct.date++;
+        if (RTC_DateStruct.date > 31)
         {
-          RTC_DateStruct.Date = 1;
+          RTC_DateStruct.date = 1;
         }
-        M5.Rtc.SetData(&RTC_DateStruct);
+        M5.Rtc.setDate(&RTC_DateStruct);
       }
       break;
     case 4:
       M5.Lcd.println("M5: set hour (B: nxt)");
       if (buttonA)
       {
-        RTC_TimeStruct.Hours++;
-        if (RTC_TimeStruct.Hours > 23)
+        RTC_TimeStruct.hours++;
+        if (RTC_TimeStruct.hours > 23)
         {
-          RTC_TimeStruct.Hours = 0;
+          RTC_TimeStruct.hours = 0;
         }
-        M5.Rtc.SetTime(&RTC_TimeStruct);
+        M5.Rtc.setTime(&RTC_TimeStruct);
       }
       break;
     case 5:
       M5.Lcd.println("M5: set minute (B: nxt)");
       if (buttonA)
       {
-        RTC_TimeStruct.Minutes++;
-        if (RTC_TimeStruct.Minutes > 59)
+        RTC_TimeStruct.minutes++;
+        if (RTC_TimeStruct.minutes > 59)
         {
-          RTC_TimeStruct.Minutes = 0;
+          RTC_TimeStruct.minutes = 0;
         }
-        M5.Rtc.SetTime(&RTC_TimeStruct);
+        M5.Rtc.setTime(&RTC_TimeStruct);
       }
       break;
     case 6:
       M5.Lcd.println("M5: clear seconds (B: nxt)");
       if (buttonA)
       {
-        RTC_TimeStruct.Seconds = 0;
-        M5.Rtc.SetTime(&RTC_TimeStruct);
+        RTC_TimeStruct.seconds = 0;
+        M5.Rtc.setTime(&RTC_TimeStruct);
       }
       break;
     default:
@@ -274,10 +274,10 @@ void displayDateTime()
   }
   buttonA = false;
   M5.Lcd.setCursor(0, 1, 1);
-  M5.Lcd.printf("%04d-%02d-%02d\n", RTC_DateStruct.Year,
-  RTC_DateStruct.Month, RTC_DateStruct.Date);
-  M5.Lcd.printf("%02d:%02d:%02d\n", RTC_TimeStruct.Hours,
-    RTC_TimeStruct.Minutes, RTC_TimeStruct.Seconds);
+  M5.Lcd.printf("%04d-%02d-%02d\n", RTC_DateStruct.year,
+  RTC_DateStruct.month, RTC_DateStruct.date);
+  M5.Lcd.printf("%02d:%02d:%02d\n", RTC_TimeStruct.hours,
+    RTC_TimeStruct.minutes, RTC_TimeStruct.seconds);
 }
 
 void displayMidnightOff()
@@ -316,6 +316,7 @@ void updateDisplay()
     displayMidnightOff();
   else
     displayMode = 0;  // should never get here
+  // clear buttonB after display functions have used it
 }
 
 void setPowerEnable(bool enable)
@@ -346,7 +347,7 @@ void midnight()
 
 void hoursUpdate()
 {
-  int currentHour = RTC_TimeStruct.Hours;
+  int currentHour = RTC_TimeStruct.hours;
   if (currentHour != lastHour)
   {
     Serial.printf("New hour: %d\n", currentHour);
@@ -368,8 +369,8 @@ void secondsUpdate()
   }
 
   // Get the time-of-day from the real-time clock for use by various called functions.
-  M5.Rtc.GetTime(&RTC_TimeStruct);
-  M5.Rtc.GetData(&RTC_DateStruct);
+  M5.Rtc.getTime(&RTC_TimeStruct);
+  M5.Rtc.getDate(&RTC_DateStruct);
 
   batteryVolts = readVolts();
   if (batteryVolts < shutdownVLimit)
@@ -381,7 +382,7 @@ void secondsUpdate()
     M5.Lcd.println("Shutting\nDown");
     delay(2000);
 
-    M5.Axp.PowerOff();
+    StickCP2.Power.powerOff();
     // never reached
   }
   else if (batteryVolts < lowVLimit)
@@ -398,12 +399,12 @@ void secondsUpdate()
 
 void setup() {
   // initialize M5StickC
-  M5.begin();
-  M5.Lcd.setRotation(1);
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setCursor(0, 0, 2);
-  M5.Lcd.setTextColor(TFT_RED,TFT_BLACK);
-  M5.Lcd.setTextSize(2);
+  StickCP2.begin();
+  StickCP2.Display.setRotation(1);
+  StickCP2.Display.fillScreen(BLACK);
+  StickCP2.Display.setCursor(0, 0, 2);
+  StickCP2.Display.setTextColor(TFT_RED,TFT_BLACK);
+  StickCP2.Display.setTextSize(2);
   M5.update();
   Serial.begin(115200);
 
@@ -436,9 +437,9 @@ void setup() {
   int64_t now = esp_timer_get_time();
   nextSecondTime = now + 1000000;  // time to increment the seconds counter
   // Get the time-of-day from the real-time clock.
-  M5.Rtc.GetTime(&RTC_TimeStruct);
-  M5.Rtc.GetData(&RTC_DateStruct);
-  lastHour = RTC_TimeStruct.Hours;
+  M5.Rtc.getTime(&RTC_TimeStruct);
+  M5.Rtc.getDate(&RTC_DateStruct);
+  lastHour = RTC_TimeStruct.hours;
 }
 
 void loop() {
