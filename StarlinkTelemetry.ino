@@ -425,7 +425,7 @@ void setup() {
   // Initialize EEPROM
   while (!EEPROM.begin(EEPROM_SIZE)) {  // Request storage of SIZE size(success return)
     Serial.println("\nFailed to initialise EEPROM!");
-    M5.Lcd.println("EEPROM Fail");
+    StickCP2.Display.println("EEPROM Fail");
     delay(1000000);
   }
 
