@@ -284,16 +284,16 @@ void displayMidnightOff()
 {
   M5.Lcd.fillScreen(BLACK);
   M5.Lcd.setCursor(0, 1, 1);
-  M5.Lcd.printf("Midnight:\n%s\n", midnightOff?"OFF":"No Chg\nM5: toggle\n(B: nxt)");
+  M5.Lcd.printf("Midnight:\n%s\n", midnightOff?"OFF\nM5: toogle\n(B: nxt)":"Stays ON\nM5: toggle\n(B: nxt)");
   if (buttonA)
   {
-    if (!midnightOff)
+    if (midnightOff)
     {
-      midnightOff = 1;
+      midnightOff = 0;
     }
     else
     {
-      midnightOff = 0;
+      midnightOff = 1;
     }
     EEPROM.write(MIDNIGHT_OFF_ADDR, (uint8_t)midnightOff);
     EEPROM.commit();
@@ -316,7 +316,6 @@ void updateDisplay()
     displayMidnightOff();
   else
     displayMode = 0;  // should never get here
-  // clear buttonB after display functions have used it
 }
 
 void setPowerEnable(bool enable)
@@ -468,6 +467,7 @@ void loop() {
     else
       displayMode = 0;
     
+    // clear buttonB after display functions have used it
     buttonB = false;
   }
 
